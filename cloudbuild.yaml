@@ -1,0 +1,41 @@
+# Build e deploy no Cloud Run a cada merge na main (gatilho do Cloud Build).
+substitutions:
+  _SERVICO: site-ars
+  _REGIAO: southamerica-east1
+
+steps:
+  - id: cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args: ["-c", "docker pull ${_REGIAO}-docker.pkg.dev/$PROJECT_ID/imagens/${_SERVICO}:latest || true"]
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGIAO}-docker.pkg.dev/$PROJECT_ID/imagens/${_SERVICO}:$SHORT_SHA
+      - -t
+      - ${_REGIAO}-docker.pkg.dev/$PROJECT_ID/imagens/${_SERVICO}:latest
+      - --cache-from
+      - ${_REGIAO}-docker.pkg.dev/$PROJECT_ID/imagens/${_SERVICO}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, "${_REGIAO}-docker.pkg.dev/$PROJECT_ID/imagens/${_SERVICO}"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICO}
+      - --image=${_REGIAO}-docker.pkg.dev/$PROJECT_ID/imagens/${_SERVICO}:$SHORT_SHA
+      - --region=${_REGIAO}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1200s
